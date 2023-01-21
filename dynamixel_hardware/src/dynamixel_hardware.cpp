@@ -149,32 +149,8 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   control_items_[kGoalPositionItem] = goal_position;
   control_items_[kGoalVelocityItem] = goal_velocity;
   control_items_[kPresentPositionItem] = present_position;
-  control_items_[kPresentVelocityItem] = present_velocity;
-  control_items_[kPresentCurrentItem] = present_current;
-
-/*   if (!dynamixel_workbench_.addSyncWriteHandler(
-        control_items_[kGoalPositionItem]->address, control_items_[kGoalPositionItem]->data_length,
-        &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    return return_type::ERROR;
-  }
-
-  if (!dynamixel_workbench_.addSyncWriteHandler(
-        control_items_[kGoalVelocityItem]->address, control_items_[kGoalVelocityItem]->data_length,
-        &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    return return_type::ERROR;
-  }
-
-  uint16_t start_address = std::min(
-    control_items_[kPresentPositionItem]->address, control_items_[kPresentCurrentItem]->address);
-  uint16_t read_length = control_items_[kPresentPositionItem]->data_length +
-                         control_items_[kPresentVelocityItem]->data_length +
-                         control_items_[kPresentCurrentItem]->data_length + 2;
-  if (!dynamixel_workbench_.addSyncReadHandler(start_address, read_length, &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    return return_type::ERROR;
-  } */
+  control_items_[kPresentSpeedItem] = present_velocity;
+  control_items_[kPresentLoadItem] = present_current;
 
   status_ = hardware_interface::status::CONFIGURED;
   return return_type::OK;
@@ -242,40 +218,45 @@ return_type DynamixelHardware::read()
   }
 
   std::vector<uint8_t> ids(info_.joints.size(), 0);
-  std::vector<int32_t> positions(info_.joints.size(), 0);
-  std::vector<int32_t> velocities(info_.joints.size(), 0);
-  std::vector<int32_t> currents(info_.joints.size(), 0);
+  std::vector<uint32_t> positions(info_.joints.size(), 0);
+  std::vector<uint32_t> velocities(info_.joints.size(), 0);
+  std::vector<uint32_t> currents(info_.joints.size(), 0);
 
   std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
   const char * log = nullptr;
 
-  if (!dynamixel_workbench_.syncRead(
-        kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(), &log)) {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
-  if (!dynamixel_workbench_.getSyncReadData(
-        kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
-        control_items_[kPresentCurrentItem]->address,
-        control_items_[kPresentCurrentItem]->data_length, currents.data(), &log)) {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
-  if (!dynamixel_workbench_.getSyncReadData(
-        kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
-        control_items_[kPresentVelocityItem]->address,
-        control_items_[kPresentVelocityItem]->data_length, velocities.data(), &log)) {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
-  if (!dynamixel_workbench_.getSyncReadData(
-        kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
-        control_items_[kPresentPositionItem]->address,
-        control_items_[kPresentPositionItem]->data_length, positions.data(), &log)) {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
   for (uint i = 0; i < ids.size(); i++) {
+
+    if (!dynamixel_workbench_.readRegister(
+        joint_ids_[i],
+        control_items_[kPresentPositionItem]->address,
+        control_items_[kPresentPositionItem]->data_length,
+        &positions[i],
+        &log)){
+          
+          RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+        }
+
+    if (!dynamixel_workbench_.readRegister(
+        joint_ids_[i],
+        control_items_[kPresentSpeedItem]->address,
+        control_items_[kPresentSpeedItem]->data_length,
+        &velocities[i],
+        &log)){
+          
+          RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+        }
+
+    if (!dynamixel_workbench_.readRegister(
+        joint_ids_[i],
+        control_items_[kPresentLoadItem]->address,
+        control_items_[kPresentLoadItem]->data_length,
+        &currents[i],
+        &log)){
+          
+          RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+        }
+
     joints_[i].state.position = dynamixel_workbench_.convertValue2Radian(ids[i], positions[i]);
     joints_[i].state.velocity = dynamixel_workbench_.convertValue2Velocity(ids[i], velocities[i]);
     joints_[i].state.effort = dynamixel_workbench_.convertValue2Current(currents[i]);
@@ -286,13 +267,16 @@ return_type DynamixelHardware::read()
 
 return_type DynamixelHardware::write()
 {
-  if (use_dummy_) {
+  //TODO:REMOVE THIS BULLSHIT CCOMMENT
+  /*if (use_dummy_) */{
     for (auto & joint : joints_) {
       joint.state.position = joint.command.position;
     }
 
     return return_type::OK;
   }
+
+  //TODO:REMOVE THIS BULLSHIT
 
   std::vector<uint8_t> ids(info_.joints.size(), 0);
   std::vector<int32_t> commands(info_.joints.size(), 0);
