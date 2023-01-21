@@ -72,6 +72,8 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   auto usb_port = info_.hardware_parameters.at("usb_port");
   auto baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
   const char * log = nullptr;
+ 
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "***TJ'S BUILD");
 
   RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "usb_port: %s", usb_port.c_str());
   RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "baud_rate: %d", baud_rate);
@@ -81,13 +83,25 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     return return_type::ERROR;
   }
 
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+
   for (uint i = 0; i < info_.joints.size(); ++i) {
     uint16_t model_number = 0;
     if (!dynamixel_workbench_.ping(joint_ids_[i], &model_number, &log)) {
       RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      
       return return_type::ERROR;
     }
+  
+    const char * model_name = dynamixel_workbench_.getModelName(joint_ids_[i], &log);
+    float protocol_version = dynamixel_workbench_.getProtocolVersion();
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware),
+      "Ping detected: model name: %s model number: %d protocol version: %1.1f", 
+      model_name, model_number, protocol_version);
   }
+  
+  dynamixel_workbench_.initBulkRead(&log);
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "%s", log);
 
   enable_torque(false);
   set_control_mode(ControlMode::Position, true);
@@ -138,7 +152,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   control_items_[kPresentVelocityItem] = present_velocity;
   control_items_[kPresentCurrentItem] = present_current;
 
-  if (!dynamixel_workbench_.addSyncWriteHandler(
+/*   if (!dynamixel_workbench_.addSyncWriteHandler(
         control_items_[kGoalPositionItem]->address, control_items_[kGoalPositionItem]->data_length,
         &log)) {
     RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
@@ -160,7 +174,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   if (!dynamixel_workbench_.addSyncReadHandler(start_address, read_length, &log)) {
     RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
     return return_type::ERROR;
-  }
+  } */
 
   status_ = hardware_interface::status::CONFIGURED;
   return return_type::OK;
@@ -204,7 +218,7 @@ return_type DynamixelHardware::start()
       joints_[i].state.position = 0.0;
       joints_[i].state.velocity = 0.0;
       joints_[i].state.effort = 0.0;
-    }
+    } 
   }
   read();
   reset_command();
